@@ -88,15 +88,28 @@ for part in parts:
     print(part['description'].split('\n')[0])
     print("******************")
     routingIDs = fulcrum.getRoutingIDs(quoteID, part['id'])
+    materials = {}
     for routingID in routingIDs:
         mats = fulcrum.getInputMaterials(quoteID, part['id'], routingID)
         if mats:
             for m in mats:
-                # print(json.dumps(m, indent=4))
-                print(m['materialShape']['materialReferenceId'], m['materialShape']['dimension'])
-                print("vendor:", fulcrum.getVendorName(m['materialShape']['vendors'][0]['vendorId']))
-                print("Price: ", m['materialShape']['vendors'][0]['priceBreaks'][0]['price'], '/lb')
-                print(f"Dimensions: {m['nestings'][0]['d2']}\" x {m['nestings'][0]['d3']}\"")
+                print(m['materialShape']['materialReferenceId'], m['materialShape']['dimension'])  # material codename and thickness
+                print("vendor:", fulcrum.getVendorName(m['materialShape']['vendors'][0]['vendorId']))  # vendor name
+                print("Price: ", m['materialShape']['vendors'][0]['priceBreaks'][0]['price'], '/lb')  # material price
+                print(f"Dimensions: {m['nestings'][0]['d2']}\" x {m['nestings'][0]['d3']}\"")  # length and width of part
+
+                # track total length and width of sheet metal needed
+                # TODO: exclude roundbar from this check, make another process for roundbar
+                if not materials.get(m['materialShape']['dimension'], None):
+                    materials[m['materialShape']['dimension']] = [m['nestings'][0]['d2'], m['nestings'][0]['d3']]
+                else:
+                    materials[m['materialShape']['dimension']][0] += m['nestings'][0]['d2']
+                    materials[m['materialShape']['dimension']][1] += m['nestings'][0]['d3']
             print()
+
+    print("total sheet metal needed:", json.dumps(materials, indent=2))
+
+
+
 
 # print(json.dumps(res.json(), indent=4))
