@@ -1,86 +1,100 @@
 import json
 import requests
 
+class Fulcrum:
+    def __init__(self, bear_token: str):
+        self.bear_token = bear_token
+        self.base_url = "https://api.fulcrumpro.com/api/"
+
+    def findQuote(self, quoteNumber: int):
+        """Find quote given the quote number in fulcrum"""
+        request = requests.post(
+            self.base_url + "/quotes/list",
+            headers={'Authorization': f'Bearer {bear_token}'},
+            json={
+                "numbers": [quoteNumber]
+            }
+        )
+        return request.json()
+
+    def getQuote(self, quoteID: str):
+        """Get quote given the quoteID from Fulcrum's backend"""
+        request = requests.get(
+            self.base_url + f"/quotes/{quoteID}",
+            headers={'Authorization': f'Bearer {bear_token}'},
+        )
+        return request.json()
+
+    def getQuoteID(self, quoteNumber: int) -> str:
+        """Get quote ID given the quote number from Fulcrum's backend"""
+        quote = self.findQuote(quoteNumber)
+        if len(quote) > 1:
+            raise Exception("Error: more than one quote found")
+        return quote[0]['id']
+
+    def getParts(self, quoteID: str):
+        """Get all parts consisting a given quote"""
+        request = requests.post(
+            self.base_url + f"/quotes/{quoteID}/part-line-items/list",
+            headers={'Authorization': f'Bearer {bear_token}'},
+        )
+        return request.json()
+
+    def getPartIDs(self, quoteID: str):
+        """Get IDs of all parts consisting a given quote"""
+        parts = self.getParts(quoteID)
+        return [i.get('itemId') for i in parts]
+
+    def getItem(self, itemID: str):
+        """General: get item given item ID"""
+        res = requests.get(
+            self.base_url + f"/items/{itemID}",
+            headers={'Authorization': f'Bearer {bear_token}'}
+        )
+        return res.json()
+
+    def getRoutingIDs(self, quoteID: str, lineItemID: str) -> list:
+        """Get route IDs (manufacturing process schema) for a given part (line item) and quote"""
+        res = requests.get(
+            self.base_url + f"/quotes/{quoteID}/part-line-items/{lineItemID}/make-summary",
+            headers={'Authorization': f'Bearer {bear_token}'}
+        )
+        return [i['routingId'] for i in res.json()]
+
+    def getInputMaterials(self, quoteID: str, lineItemID: str, routingID: str) -> list:
+        """Get input materials to consist a part, given quote, part (line item) and routing ID"""
+        res = requests.post(
+            self.base_url + f"/quotes/{quoteID}/part-line-items/{lineItemID}/routing/{routingID}/input-materials/list",
+            headers={'Authorization': f'Bearer {bear_token}'}
+        )
+        return res.json()
+
+    def getVendorName(self, vendorID: str) -> str:
+        """Get vendor name from vendorID"""
+        res = requests.get(
+            self.base_url + f"/vendors/{vendorID}",
+            headers={'Authorization': f'Bearer {bear_token}'}
+        )
+        return res.json()['name']
+
 bear_token = open('api_key.txt', 'r').read()
-base_url = 'https://api.fulcrumpro.com/api'
+fulcrum = Fulcrum(bear_token)
 
-def getQuotes(quoteNumber: int):
-    request = requests.post(
-        base_url+"/quotes/list",
-        headers={'Authorization': f'Bearer {bear_token}'},
-        json={
-            "numbers": [quoteNumber]
-        }
-    )
-    return request.json()
-
-def getQuote(quoteID: str):
-    request = requests.get(
-        base_url+f"/quotes/{quoteID}",
-        headers={'Authorization': f'Bearer {bear_token}'},
-    )
-    return request.json()
-
-def getQuoteID(quoteNumber: int) -> str:
-    quote = getQuotes(quoteNumber)
-    if len(quote) > 1:
-        raise Exception("Error: more than one quote found")
-    return quote[0]['id']
-
-def getParts(quoteID: str):
-    request = requests.post(
-        base_url+f"/quotes/{quoteID}/part-line-items/list",
-        headers={'Authorization': f'Bearer {bear_token}'},
-    )
-    return request.json()
-
-def getPartIDs(quoteID: str):
-    parts = getParts(quoteID)
-    return [i.get('itemId') for i in parts]
-
-def getItem(itemID: str):
-    res = requests.get(
-        base_url+f"/items/{itemID}",
-        headers={'Authorization': f'Bearer {bear_token}'}
-    )
-    return res.json()
-
-def getRoutingIDs(quoteID: str, lineItemID: str) -> list:
-    res = requests.get(
-        base_url + f"/quotes/{quoteID}/part-line-items/{lineItemID}/make-summary",
-        headers={'Authorization': f'Bearer {bear_token}'}
-    )
-    return [i['routingId'] for i in res.json()]
-
-def getInputMaterials(quoteID: str, lineItemID: str, routingID: str) -> list:
-    res = requests.post(
-        base_url + f"/quotes/{quoteID}/part-line-items/{lineItemID}/routing/{routingID}/input-materials/list",
-        headers={'Authorization': f'Bearer {bear_token}'}
-    )
-    return res.json()
-
-def getVendorName(vendorID: str) -> str:
-    res = requests.get(
-        base_url + f"/vendors/{vendorID}",
-        headers={'Authorization': f'Bearer {bear_token}'}
-    )
-    return res.json()['name']
-
-quoteID = getQuoteID(1050)
-parts = getParts(quoteID)
-routingIDs = getRoutingIDs(quoteID, parts[0]['id'])
+quoteID = fulcrum.getQuoteID(1050)
+parts = fulcrum.getParts(quoteID)
+routingIDs = fulcrum.getRoutingIDs(quoteID, parts[0]['id'])
 
 for part in parts:
     print(part['description'].split('\n')[0])
     print("******************")
-    routingIDs = getRoutingIDs(quoteID, part['id'])
+    routingIDs = fulcrum.getRoutingIDs(quoteID, part['id'])
     for routingID in routingIDs:
-        mats = getInputMaterials(quoteID, part['id'], routingID)
+        mats = fulcrum.getInputMaterials(quoteID, part['id'], routingID)
         if mats:
             for m in mats:
                 # print(json.dumps(m, indent=4))
                 print(m['materialShape']['materialReferenceId'], m['materialShape']['dimension'])
-                print("vendor:", getVendorName(m['materialShape']['vendors'][0]['vendorId']))
+                print("vendor:", fulcrum.getVendorName(m['materialShape']['vendors'][0]['vendorId']))
                 print("Price: ", m['materialShape']['vendors'][0]['priceBreaks'][0]['price'], '/lb')
                 print(f"Dimensions: {m['nestings'][0]['d2']}\" x {m['nestings'][0]['d3']}\"")
             print()
