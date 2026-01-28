@@ -1,4 +1,6 @@
 import json
+from typing import List, Tuple
+
 import requests
 
 class Fulcrum:
@@ -77,39 +79,56 @@ class Fulcrum:
         )
         return res.json()['name']
 
+    def getMaterial(self, materialID: str) -> str:
+        res = requests.post(
+            self.base_url + f"/materials/list", #{materialID}",
+            headers={'Authorization': f'Bearer {self.bear_token}'},
+            json={'ids': [materialID]}
+        )
+        return res.json()[0]
+
 bear_token = open('api_key.txt', 'r').read()
 fulcrum = Fulcrum(bear_token)
 
 quoteID = fulcrum.getQuoteID(1050)
 parts = fulcrum.getParts(quoteID)
 routingIDs = fulcrum.getRoutingIDs(quoteID, parts[0]['id'])
-
+materials = {}
 for part in parts:
     print(part['description'].split('\n')[0])
     print("******************")
     routingIDs = fulcrum.getRoutingIDs(quoteID, part['id'])
-    materials = {}
+
     for routingID in routingIDs:
         mats = fulcrum.getInputMaterials(quoteID, part['id'], routingID)
+        # print(json.dumps(mats, indent=2))
         if mats:
             for m in mats:
-                print(m['materialShape']['materialReferenceId'], m['materialShape']['dimension'])  # material codename and thickness
-                print("vendor:", fulcrum.getVendorName(m['materialShape']['vendors'][0]['vendorId']))  # vendor name
-                print("Price: ", m['materialShape']['vendors'][0]['priceBreaks'][0]['price'], '/lb')  # material price
-                print(f"Dimensions: {m['nestings'][0]['d2']}\" x {m['nestings'][0]['d3']}\"")  # length and width of part
+                mShape = m['materialShape']
+                print(mShape['materialReferenceId'], mShape['dimension'], mShape['form'])  # material codename and thickness
+                print("vendor:", fulcrum.getVendorName(mShape['vendors'][0]['vendorId']))  # vendor name
+                print("Price: ", mShape['vendors'][0]['priceBreaks'][0]['price'], '/lb')  # material price
+                print(f"Dimensions: {m['nestings'][0]['d2']}\" {'' if mShape['form'] == 'roundBar' else f"x {m['nestings'][0]['d3']}\""}")  # length and width of part
+                # a = fulcrum.getMaterial("SS-304-#4|SS-304-#4-Sheet-0.06")
+                # print('a\n*******')
+                # print(json.dumps(a, indent=2))
+                print('m\n*******')
+                print(json.dumps(m, indent=2))
 
                 # track total length and width of sheet metal needed
                 # TODO: exclude roundbar from this check, make another process for roundbar
-                if not materials.get(m['materialShape']['dimension'], None):
-                    materials[m['materialShape']['dimension']] = [m['nestings'][0]['d2'], m['nestings'][0]['d3']]
-                else:
-                    materials[m['materialShape']['dimension']][0] += m['nestings'][0]['d2']
-                    materials[m['materialShape']['dimension']][1] += m['nestings'][0]['d3']
+                if mShape['form'] == 'sheet':
+                    if not materials.get(mShape['dimension'], None):
+                        materials[mShape['dimension']] = [m['nestings'][0]['d2'], m['nestings'][0]['d3']]
+                    else:
+                        materials[mShape['dimension']][0] += m['nestings'][0]['d2']
+                        materials[mShape['dimension']][1] += m['nestings'][0]['d3']
+                elif mShape['form'] == 'roundBar':
+                    if not materials.get(mShape['dimension'], None):
+                        materials[mShape['dimension']] = m['nestings'][0]['d2']
+
+                    else:
+                        materials[mShape['dimension']] += m['nestings'][0]['d2']
             print()
 
-    print("total sheet metal needed:", json.dumps(materials, indent=2))
-
-
-
-
-# print(json.dumps(res.json(), indent=4))
+print("total materials metal needed:", json.dumps(materials, indent=2))
