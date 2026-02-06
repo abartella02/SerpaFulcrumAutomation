@@ -103,7 +103,17 @@ class Quote(FulcrumObject):
         assembly = self.fulcrum.getParts(self.quoteID)
         self.assembly : List[Part]= [Part(i['id'], self.quoteID) for i in assembly]
 
-        self.materials : List[MaterialNeeded]= []
+        self.materialNeeded = {}
+
+        for i in self.assembly:
+            for key, value in i.materialNeeded.items():
+                if self.materialNeeded.get(key, None) is None:
+                    self.materialNeeded[key] = value
+                else:
+                    self.materialNeeded[key] += value
+
+    def getMaterialNeeded(self):
+        return self.materialNeeded
 
 class Part(FulcrumObject):
     def __init__(self, partID: str, quoteID: Optional[str] = None):
@@ -117,14 +127,26 @@ class Part(FulcrumObject):
             in self.fulcrum.getRoutingIDs(self.quoteID, self.partID)
         ]  # routingIDs
 
-        self.materials : List[MaterialNeeded]= []
+        self.materialNeeded = {}
         for subpart in self.routings:
-            self.materials.append(subpart.material)
+            # self.materials.append(subpart.materialNeeded)
+            # a = subpart.material
+            for i in subpart.material:
+                if self.materialNeeded.get(i.materialID, None) is None:
+                    if i.materialForm == 'roundBar':
+                        self.materialNeeded[i.materialID] = i.dimensions[0]
+                    else:
+                        self.materialNeeded[i.materialID] = i.area
+                else:
+                    if i.materialForm == 'roundBar':
+                        self.materialNeeded[i.materialID] += i.dimensions[0]
+                    else:
+                        self.materialNeeded[i.materialID] += i.area
 
 class Routing(FulcrumObject):
     def __init__(self, routingID: str, partID: Optional[str] = None, quoteID: Optional[str] = None):
         self.routingID : str = routingID
-        self.material : List[MaterialNeeded] = []
+        # self.material : List[MaterialNeeded] = []
         self.dimensions : Tuple[int, int] = 0, 0
 
         self.partID : Optional[str] = partID
@@ -136,9 +158,10 @@ class Routing(FulcrumObject):
             routingID=self.routingID
         )
 
+        self.material = []
         for mat in material_list:
             self.material.append(MaterialNeeded(mat['materialId'], mat['materialShape'], mat['nestings']))
-        b = 1
+
 
 class Material(FulcrumObject):
     def __init__(self, materialNameID: str, materialShape: dict):
@@ -156,36 +179,13 @@ class Material(FulcrumObject):
         self.materialType : str = matShape['materialReferenceName']  # Stainless steel, aluminum, etc
         self.thickness : str = matShape['dimension'].replace('"', 'in')  # 12 GA, 0.25", etc
         self.vendors : list[Vendor] = [Vendor(vendor['vendorId']) for vendor in matShape['vendors']]
-        a = 1
 
 class Vendor (FulcrumObject):
+    # TODO
     def __init__(self, vendorID: str):
         self.vendorID : str = vendorID
 
 class MaterialNeeded(Material):
-    class Dimensions:
-        def __init__(self, dimensions):
-            self.x: int | None = None
-            self.y: int | None = None
-            self.z: int | None = None
-            self.dims = []
-
-            if len(dimensions) > 0:
-                if len(dimensions) <= 1:
-                    self.x = dimensions[0]
-                    self.dims.append(self.x)
-                if len(dimensions) <= 2:
-                    self.y : int = dimensions[1]
-                    self.dims.append(self.y)
-                if len(dimensions) <= 3:
-                    self.z : int = dimensions[2]
-                    self.dims.append(self.z)
-            else:
-                raise ValueError('Dimensions cannot be empty')
-
-        def __str__(self):
-            return self.dims
-
     def __getDims(self, nestings: dict) -> Tuple:
         d1 = nestings.get('d1', None)
         d2 = nestings.get('d2', None)
@@ -213,16 +213,18 @@ class MaterialNeeded(Material):
         :param materialNameID: i.e. SS-304-#4|SS-304-#4-Sheet-0.06 (called materialID in api response)
         :param nestings: dict of dimensions of part
         """
-        super().__init__(materialNameID, materialShape)
+        self.material = super().__init__(materialNameID, materialShape)
         self._dimensions : Tuple[int] = self.__getDims(nestings[0])
         self.dimensions : Tuple[int, int] | Tuple[int] | None = None
+        self.area : int = 0  # in square inches
 
         if self.materialForm == 'roundBar':
-            self.dimensions = self._dimensions[0],
+            self.dimensions = self._dimensions[0],  # x in inches
         elif self.materialForm == 'sheet' and len(self._dimensions) >= 2:
-            self.dimensions = self._dimensions
-        print("**", self.materialName, self.materialForm, self.dimensions)
+            self.dimensions = self._dimensions  # x, y in inches
+            self.area = self._dimensions[0] * self._dimensions[1]
+        # print("**", self.materialName, self.materialForm, self.dimensions, self.area)
 
 FulcrumObject.init_fulcrum()
 a = Quote(1050)
-a=1
+print(json.dumps(a.materialNeeded, indent=2))
